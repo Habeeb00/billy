@@ -1,6 +1,5 @@
 
-
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import type { Ad } from '../types';
 
 const GRID_COLS = 28;
@@ -63,16 +62,18 @@ function PurchasedAd({ ad }: PurchasedAdProps) {
 interface EmptyPlotProps {
     plotId: string;
     isSelected: boolean;
-    onClick: (plotId: string) => void;
+    onMouseDown: (plotId: string) => void;
+    onMouseEnter: (plotId: string) => void;
 }
 
-function EmptyPlot({ plotId, isSelected, onClick }: EmptyPlotProps) {
-    const baseClasses = 'w-full h-full transition-colors bg-gray-800 hover:bg-gray-700 cursor-pointer';
-    const selectedClasses = 'outline outline-2 outline-green-400 outline-offset-[-2px] z-10';
+function EmptyPlot({ plotId, isSelected, onMouseDown, onMouseEnter }: EmptyPlotProps) {
+    const baseClasses = 'relative z-10 w-full h-full transition-colors bg-gray-800 hover:bg-gray-700 cursor-pointer';
+    const selectedClasses = 'outline outline-2 outline-green-400 outline-offset-[-2px]';
 
     return (
         <div
-            onClick={() => onClick(plotId)}
+            onMouseDown={(e) => { e.preventDefault(); onMouseDown(plotId); }}
+            onMouseEnter={() => onMouseEnter(plotId)}
             className={`${baseClasses} ${isSelected ? selectedClasses : ''}`}
             aria-label={`Purchase plot ${plotId}`}
         >
@@ -92,24 +93,82 @@ interface BillboardGridProps {
 export function BillboardGrid({ ads, selectedPlots, setSelectedPlots, purchasedPlotIds }: BillboardGridProps) {
     const selectedPlotsSet = useMemo(() => new Set(selectedPlots), [selectedPlots]);
 
-    const handlePlotClick = (plotId: string) => {
-        if (purchasedPlotIds.has(plotId)) {
-            return;
+    const [dragState, setDragState] = useState<{
+        isMouseDown: boolean;
+        hasDragged: boolean;
+        startPlotId: string | null;
+        initialSelection: string[];
+    }>({
+        isMouseDown: false,
+        hasDragged: false,
+        startPlotId: null,
+        initialSelection: [],
+    });
+
+    useEffect(() => {
+        const handleMouseUpGlobal = () => {
+            if (dragState.isMouseDown) {
+                if (!dragState.hasDragged && dragState.startPlotId) {
+                    const newSelectedPlots = new Set(dragState.initialSelection);
+                    if (newSelectedPlots.has(dragState.startPlotId)) {
+                        newSelectedPlots.delete(dragState.startPlotId);
+                    } else {
+                        newSelectedPlots.add(dragState.startPlotId);
+                    }
+                    setSelectedPlots(Array.from(newSelectedPlots));
+                }
+                setDragState({ isMouseDown: false, hasDragged: false, startPlotId: null, initialSelection: [] });
+            }
+        };
+
+        window.addEventListener('mouseup', handleMouseUpGlobal);
+        return () => {
+            window.removeEventListener('mouseup', handleMouseUpGlobal);
+        };
+    }, [dragState, setSelectedPlots]);
+
+    const handleMouseDown = useCallback((plotId: string) => {
+        if (purchasedPlotIds.has(plotId)) return;
+        setDragState({
+            isMouseDown: true,
+            hasDragged: false,
+            startPlotId: plotId,
+            initialSelection: selectedPlots,
+        });
+    }, [purchasedPlotIds, selectedPlots]);
+
+    const handleMouseEnter = useCallback((plotId: string) => {
+        if (!dragState.isMouseDown || !dragState.startPlotId) return;
+
+        if (!dragState.hasDragged) {
+            setDragState(prev => ({ ...prev, hasDragged: true }));
         }
-        
-        const newSelectedPlots = new Set(selectedPlotsSet);
-        if (newSelectedPlots.has(plotId)) {
-            newSelectedPlots.delete(plotId);
-        } else {
-            newSelectedPlots.add(plotId);
+
+        const [startRow, startCol] = parsePlotId(dragState.startPlotId);
+        const [endRow, endCol] = parsePlotId(plotId);
+
+        const minRow = Math.min(startRow, endRow);
+        const maxRow = Math.max(startRow, endRow);
+        const minCol = Math.min(startCol, endCol);
+        const maxCol = Math.max(startCol, endCol);
+
+        const newSelection: string[] = [];
+        for (let r = minRow; r <= maxRow; r++) {
+            for (let c = minCol; c <= maxCol; c++) {
+                const currentPlotId = `${r}-${c}`;
+                if (purchasedPlotIds.has(currentPlotId)) {
+                    return; 
+                }
+                newSelection.push(currentPlotId);
+            }
         }
-        setSelectedPlots(Array.from(newSelectedPlots));
-    };
+        setSelectedPlots(newSelection);
+    }, [dragState, purchasedPlotIds, setSelectedPlots]);
 
     const adDataMap = useMemo(() => {
         const map = new Map<string, { ad: Ad; isTopLeft: boolean }>();
         ads.forEach(ad => {
-            const topLeftPlotId = ad.plots[0]; // Assumes plots are sorted
+            const topLeftPlotId = ad.plots[0];
             ad.plots.forEach(plotId => {
                 map.set(plotId, { ad, isTopLeft: plotId === topLeftPlotId });
             });
@@ -129,21 +188,18 @@ export function BillboardGrid({ ads, selectedPlots, setSelectedPlots, purchasedP
                 const plotAdInfo = adDataMap.get(plotId);
 
                 if (plotAdInfo) {
-                    // This plot is part of a purchased ad.
-                    // Only render the ad component for the top-left plot of the ad.
                     if (plotAdInfo.isTopLeft) {
                         return <PurchasedAd key={plotAdInfo.ad.id} ad={plotAdInfo.ad} />;
                     }
-                    // For other plots covered by the ad, render nothing.
                     return null;
                 } else {
-                    // This plot is not part of any ad, so it's an empty, clickable plot.
                     return (
                         <EmptyPlot
                             key={plotId}
                             plotId={plotId}
                             isSelected={selectedPlotsSet.has(plotId)}
-                            onClick={handlePlotClick}
+                            onMouseDown={handleMouseDown}
+                            onMouseEnter={handleMouseEnter}
                         />
                     );
                 }
