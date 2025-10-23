@@ -1,18 +1,32 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, Session } from '@supabase/supabase-js';
 import { PurchaseModal } from './components/PurchaseModal';
 import { SuccessModal } from './components/SuccessModal';
 import { BillboardGrid } from './components/BillboardGrid';
+import { AuthModal } from './components/AuthModal';
 import type { Ad, Theme } from './types';
 
 
 // --- Supabase Configuration ---
 // IMPORTANT: Replace with your actual Supabase project URL and anon key.
-// You can find these in your Supabase project settings under "API".
-// You also need to enable Realtime for the 'ads' table.
 const supabaseUrl = "https://sexehrjneeghnomoxopq.supabase.co";
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNleGVocmpuZWVnaG5vbW94b3BxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEyMzYzMTQsImV4cCI6MjA3NjgxMjMxNH0.OBioxZMP4y1B3dC9seGkdEMzR3WOAeZa-rqqd3aDT3c";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Export the client so other components can use it.
+// FIX: Added custom fetch to bypass service worker cache issues (net::ERR_FAILED).
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: {
+    fetch: (input, init) => {
+      return fetch(input, { ...init, cache: 'reload' });
+    },
+  },
+});
+
+// --- Admin Configuration ---
+// >>> IMPORTANT <<<
+// TO MAKE THE ADMIN FEATURES WORK, YOU MUST REPLACE THIS PLACEHOLDER
+// WITH THE EXACT EMAIL ADDRESS YOU USE TO LOG IN AS THE ADMINISTRATOR.
+const ADMIN_EMAIL = "habeebrahmanofficial@gmail.com"; // <-- CHANGE THIS VALUE!
 
 
 const THEMES: Theme[] = ['day', 'night', 'rain', 'snowy'];
@@ -34,7 +48,6 @@ const isSelectionRectangular = (plots: string[]): boolean => {
     const width = maxC - minC + 1;
     const height = maxR - minR + 1;
 
-    // If the number of selected plots doesn't match the area of the bounding box, it's not a solid rectangle.
     if (plots.length !== width * height) {
         return false; 
     }
@@ -179,9 +192,12 @@ function App() {
   const [selectedPlots, setSelectedPlots] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>('day');
   const [selectionAspectRatio, setSelectionAspectRatio] = useState(1);
   const [animationsEnabled, setAnimationsEnabled] = useState(true);
+  const [session, setSession] = useState<Session | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const fetchAds = useCallback(async () => {
     const { data, error } = await supabase
@@ -198,25 +214,42 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Fetch initial data
     fetchAds();
 
-    // Listen for real-time updates (new ads)
+    // Check for an existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setIsAdmin(session?.user?.email === ADMIN_EMAIL);
+    })
+
+    // Listen for auth state changes (login, logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setIsAdmin(session?.user?.email === ADMIN_EMAIL);
+    })
+
+    // Listen for real-time database changes
     const channel = supabase.channel('ads-changes')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'ads' },
         (payload) => {
-          // The real-time listener provides immediate updates to all clients.
-          // A manual refetch is also triggered after the user's own purchase.
           setAds(currentAds => [...currentAds, payload.new as Ad]);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'ads' },
+        (payload) => {
+            setAds(currentAds => currentAds.filter(ad => ad.id !== (payload.old as Ad).id));
         }
       )
       .subscribe();
 
-    // Cleanup subscription on unmount
+    // Cleanup subscriptions on unmount
     return () => {
       supabase.removeChannel(channel);
+      subscription.unsubscribe();
     };
   }, [fetchAds]);
 
@@ -261,15 +294,14 @@ function App() {
   const handlePurchase = useCallback(async (imageBlob: Blob, message: string) => {
     if (selectedPlots.length > 0) {
         try {
-            // 1. Upload image to Supabase Storage
-            const filePath = `public/ad-${Date.now()}`;
+            // FIX: Removed 'public/' prefix to prevent incorrect path creation which caused a 400 error.
+            const filePath = `ad-${Date.now()}`;
             const { error: uploadError } = await supabase.storage
                 .from('images')
                 .upload(filePath, imageBlob);
 
             if (uploadError) throw uploadError;
 
-            // 2. Get the public URL of the uploaded image
             const { data: urlData } = supabase.storage
                 .from('images')
                 .getPublicUrl(filePath);
@@ -278,7 +310,6 @@ function App() {
             
             const imageUrl = urlData.publicUrl;
 
-            // 3. Create a new ad record in the Supabase 'ads' table
             const newAdData = {
                 plots: [...selectedPlots].sort((a, b) => {
                     const [aRow, aCol] = a.split('-').map(Number);
@@ -294,12 +325,10 @@ function App() {
             
             if (insertError) throw insertError;
 
-            // --- SUCCESS ---
             setIsModalOpen(false);
             setIsSuccessModalOpen(true);
 
         } catch (error: any) {
-             // --- FAILURE ---
             console.error("Error purchasing plot:", error);
             if (error && typeof error.message === 'string' && error.message.toLowerCase().includes('bucket not found')) {
                  alert("Purchase failed: Storage bucket 'images' not found.\n\nPlease go to your Supabase dashboard, navigate to Storage, and create a new PUBLIC bucket named 'images'.");
@@ -313,6 +342,41 @@ function App() {
     }
   }, [selectedPlots, handleCloseModal]);
   
+  const handleDeleteAd = useCallback(async (adId: string) => {
+    if (!session || !isAdmin) {
+      alert("You do not have permission to delete ads.");
+      return;
+    }
+    if (!window.confirm('Are you sure you want to remove this ad? This cannot be undone.')) {
+        return;
+    }
+
+    const originalAds = ads;
+    
+    // Optimistic UI update: remove the ad from the local state immediately.
+    setAds(currentAds => currentAds.filter(ad => ad.id !== adId));
+
+    try {
+        // FIX: Use a Supabase RPC call instead of a direct DELETE request.
+        // This is more robust and avoids the net::ERR_FAILED error caused by service workers.
+        const { error } = await supabase.rpc('delete_ad', { ad_id: adId });
+
+        if (error) {
+            // If the RPC call fails, throw the error to be caught below.
+            throw error;
+        }
+        // If successful, the optimistic update was correct and we're done.
+
+    } catch (error: any) {
+        console.error('Error deleting ad via RPC:', error);
+        console.error('Full error object:', error);
+        alert(`Failed to delete ad: ${error.message}. The billboard will be restored. This could be a permissions issue or the 'delete_ad' function might be missing in your Supabase project.`);
+        // Rollback the optimistic update on failure.
+        setAds(originalAds);
+    }
+}, [ads, session, isAdmin]);
+
+
   const handleClearSelection = useCallback(() => {
     setSelectedPlots([]);
   }, []);
@@ -327,14 +391,21 @@ function App() {
     setAnimationsEnabled(prev => !prev);
   }, []);
 
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Error logging out:", error);
+      alert("Could not log out. Please try again.");
+    }
+  };
+
+
   return (
     <main className="relative w-screen h-screen overflow-hidden">
-      {/* Background Layer: Explicitly behind and non-interactive. */}
       <div className={`absolute inset-0 z-0 pointer-events-none transition-colors duration-1000 ${BG_COLORS[theme]}`}>
         <DynamicBackground theme={theme} animationsEnabled={animationsEnabled} />
       </div>
 
-      {/* UI Layer: Non-interactive by default, specific children are enabled. */}
       <div className="relative z-10 w-full h-full pointer-events-none">
         <div className="absolute top-4 right-4 flex flex-col sm:flex-row gap-2 pointer-events-auto">
           <button
@@ -351,11 +422,27 @@ function App() {
           >
             ANIMATE: {animationsEnabled ? 'ON' : 'OFF'}
           </button>
+          {session ? (
+              <button
+                onClick={handleLogout}
+                className="bg-red-500 text-white border-2 border-b-4 border-black px-4 py-2 text-sm hover:bg-red-600 active:border-b-2 active:mt-0.5 transition-all"
+                aria-label="Log out"
+              >
+                LOGOUT {isAdmin && '(ADMIN)'}
+              </button>
+          ) : (
+             <button
+                onClick={() => setIsAuthModalOpen(true)}
+                className="bg-yellow-400 text-black border-2 border-b-4 border-black px-4 py-2 text-sm hover:bg-yellow-500 active:border-b-2 active:mt-0.5 transition-all"
+                aria-label="Open login modal"
+              >
+                LOGIN
+              </button>
+          )}
         </div>
 
         <div className="w-full h-full flex flex-col items-center justify-end">
           <div className="relative flex flex-col items-center">
-            {/* Mario-style Frame - set to be interactive */}
             <div className="bg-[#4a4a4a] p-2 sm:p-3 border-4 border-black shadow-[8px_8px_0px_rgba(0,0,0,0.7)] pointer-events-auto">
               <div className="border-4 border-t-gray-300 border-l-gray-300 border-b-gray-800 border-r-gray-800">
                 <BillboardGrid
@@ -363,6 +450,8 @@ function App() {
                   selectedPlots={selectedPlots}
                   setSelectedPlots={setSelectedPlots}
                   purchasedPlotIds={purchasedPlotIds}
+                  isAdmin={isAdmin}
+                  onDeleteAd={handleDeleteAd}
                 />
               </div>
             </div>
@@ -388,7 +477,6 @@ function App() {
                 </div>
               )}
 
-            {/* Mario-style Stand */}
             <div className="w-32 sm:w-40 h-60 sm:h-48 bg-green-600 border-x-4 border-b-4 border-black shadow-[inset_0_5px_0px_rgba(255,255,255,0.3),_inset_0_-5px_0px_rgba(0,0,0,0.3)]"></div>
           </div>
         </div>
@@ -404,6 +492,10 @@ function App() {
 
       {isSuccessModalOpen && (
         <SuccessModal onClose={handleCloseSuccessModal} />
+      )}
+
+      {isAuthModalOpen && (
+        <AuthModal onClose={() => setIsAuthModalOpen(false)} />
       )}
     </main>
   );

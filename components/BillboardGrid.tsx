@@ -29,10 +29,17 @@ const getAdBoundingBox = (ad: Ad) => {
 // --- Sub-components ---
 interface PurchasedAdProps {
     ad: Ad;
+    isAdmin: boolean;
+    onDeleteAd: (adId: string) => void;
 }
 
-const PurchasedAd = ({ ad }: PurchasedAdProps) => {
+const PurchasedAd = ({ ad, isAdmin, onDeleteAd }: PurchasedAdProps) => {
     const [isHovered, setIsHovered] = React.useState(false);
+
+    const handleDeleteClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.stopPropagation(); // prevent other events from firing
+        onDeleteAd(ad.id);
+    }
 
     return (
         <div 
@@ -47,12 +54,23 @@ const PurchasedAd = ({ ad }: PurchasedAdProps) => {
                 alt={ad.message}
                 className="w-full h-full object-cover"
             />
-            {isHovered && (
+            {isHovered && !isAdmin && (
                 <div 
                     className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-max max-w-[200px] px-3 py-1.5 bg-black text-white rounded-md text-center text-xs sm:text-sm z-20 pointer-events-none"
                 >
                     {ad.message}
                     <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-black"></div>
+                </div>
+            )}
+            {isHovered && isAdmin && (
+                <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center p-2 z-10">
+                    <p className="text-white text-xs text-center truncate mb-2">{ad.message}</p>
+                    <button 
+                        onClick={handleDeleteClick}
+                        className="bg-red-500 text-white border-2 border-b-4 border-black px-3 py-1 text-xs hover:bg-red-600 active:border-b-2 active:mt-0.5 transition-all"
+                    >
+                        Remove
+                    </button>
                 </div>
             )}
         </div>
@@ -88,9 +106,11 @@ interface BillboardGridProps {
     selectedPlots: string[];
     setSelectedPlots: (plots: string[]) => void;
     purchasedPlotIds: Set<string>;
+    isAdmin: boolean;
+    onDeleteAd: (adId: string) => void;
 }
 
-export function BillboardGrid({ ads, selectedPlots, setSelectedPlots, purchasedPlotIds }: BillboardGridProps) {
+export function BillboardGrid({ ads, selectedPlots, setSelectedPlots, purchasedPlotIds, isAdmin, onDeleteAd }: BillboardGridProps) {
     const selectedPlotsSet = useMemo(() => new Set(selectedPlots), [selectedPlots]);
 
     const [dragState, setDragState] = useState<{
@@ -189,7 +209,14 @@ export function BillboardGrid({ ads, selectedPlots, setSelectedPlots, purchasedP
 
                 if (plotAdInfo) {
                     if (plotAdInfo.isTopLeft) {
-                        return <PurchasedAd key={plotAdInfo.ad.id} ad={plotAdInfo.ad} />;
+                        return (
+                            <PurchasedAd 
+                                key={plotAdInfo.ad.id} 
+                                ad={plotAdInfo.ad}
+                                isAdmin={isAdmin}
+                                onDeleteAd={onDeleteAd}
+                             />
+                        );
                     }
                     return null;
                 } else {
