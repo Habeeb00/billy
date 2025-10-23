@@ -1,18 +1,28 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, onSnapshot, addDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { PurchaseModal } from './components/PurchaseModal';
-import { SuccessModal } from './components/SuccessModal';
 import { BillboardGrid } from './components/BillboardGrid';
 import type { Ad, Theme } from './types';
 
+// --- Firebase Configuration ---
+// IMPORTANT: Replace the placeholder values with your own Firebase project configuration.
+// You can find this in your Firebase project settings.
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
 
-// --- Supabase Configuration ---
-// IMPORTANT: Replace with your actual Supabase project URL and anon key.
-// You can find these in your Supabase project settings under "API".
-// You also need to enable Realtime for the 'ads' table.
-const supabaseUrl = "https://sexehrjneeghnomoxopq.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNleGVocmpuZWVnaG5vbW94b3BxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEyMzYzMTQsImV4cCI6MjA3NjgxMjMxNH0.OBioxZMP4y1B3dC9seGkdEMzR3WOAeZa-rqqd3aDT3c";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const storage = getStorage(app);
+const adsCollection = collection(db, 'ads');
 
 
 const THEMES: Theme[] = ['day', 'night', 'rain', 'snowy'];
@@ -43,6 +53,7 @@ const isSelectionRectangular = (plots: string[]): boolean => {
 };
 
 // --- Background Components ---
+// FIX: Converted function declarations to const function expressions to resolve TypeScript errors with the 'key' prop.
 const Cloud = ({ style }: { style: React.CSSProperties }) => {
   return (
     <div className="absolute w-24 h-10 sm:w-36 sm:h-16 bg-white rounded-full opacity-90" style={style}>
@@ -50,11 +61,12 @@ const Cloud = ({ style }: { style: React.CSSProperties }) => {
       <div className="absolute -bottom-1 right-4 w-12 h-6 sm:w-20 sm:h-10 bg-white rounded-full"></div>
     </div>
   );
-};
+}
 
+// FIX: Converted function declarations to const function expressions to resolve TypeScript errors with the 'key' prop.
 const Star = ({ style }: { style: React.CSSProperties }) => {
   return <div className="absolute bg-white w-1 h-1 rounded-full" style={{...style, animation: `twinkle ${Math.random() * 3 + 2}s infinite`}}></div>;
-};
+}
 
 function Sun() {
   return <div className="absolute top-12 left-12 w-16 h-16 bg-yellow-300 rounded-full shadow-lg"></div>;
@@ -64,12 +76,14 @@ function Moon() {
   return <div className="absolute top-12 right-12 w-16 h-16 bg-gray-200 rounded-full shadow-lg border-4 border-gray-300"></div>;
 }
 
+// FIX: Converted function declarations to const function expressions to resolve TypeScript errors with the 'key' prop.
 const Raindrop = ({ style }: { style: React.CSSProperties }) => {
   return (
     <div className="absolute w-0.5 h-10 bg-blue-300 opacity-50" style={style}></div>
   );
-};
+}
 
+// FIX: Converted function declarations to const function expressions to resolve TypeScript errors with the 'key' prop.
 const Bird = ({ style }: { style: React.CSSProperties }) => {
   return (
     <div className="absolute w-8 h-8" style={style}>
@@ -78,19 +92,21 @@ const Bird = ({ style }: { style: React.CSSProperties }) => {
       </svg>
     </div>
   );
-};
+}
 
+// FIX: Converted function declarations to const function expressions to resolve TypeScript errors with the 'key' prop.
 const Snowflake = ({ style }: { style: React.CSSProperties }) => {
     return <div className="absolute text-white text-lg select-none" style={style}>❄</div>;
-};
+}
 
+// FIX: Converted function declarations to const function expressions to resolve TypeScript errors with the 'key' prop.
 const ShootingStar = ({ style }: { style: React.CSSProperties }) => {
   return (
     <div className="absolute" style={style}>
       <div className="absolute w-48 h-px bg-gradient-to-l from-white/50 to-transparent transform rotate-[225deg] origin-top-left"></div>
     </div>
   );
-};
+}
 
 
 const BG_COLORS: Record<Theme, string> = {
@@ -178,48 +194,21 @@ function App() {
   const [ads, setAds] = useState<Ad[]>([]);
   const [selectedPlots, setSelectedPlots] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>('day');
   const [selectionAspectRatio, setSelectionAspectRatio] = useState(1);
   const [animationsEnabled, setAnimationsEnabled] = useState(true);
 
-  const fetchAds = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('ads')
-      .select('*')
-      .order('created_at', { ascending: true });
-    
-    if (error) {
-      console.error('Error fetching ads:', error);
-      alert('Could not fetch ads from the database. Check the console for more details.');
-    } else if (data) {
-      setAds(data as Ad[]);
-    }
-  }, []);
-
   useEffect(() => {
-    // Fetch initial data
-    fetchAds();
-
-    // Listen for real-time updates (new ads)
-    const channel = supabase.channel('ads-changes')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'ads' },
-        (payload) => {
-          // The real-time listener provides immediate updates to all clients.
-          // A manual refetch is also triggered after the user's own purchase.
-          setAds(currentAds => [...currentAds, payload.new as Ad]);
-        }
-      )
-      .subscribe();
+    // Listen for real-time updates from Firestore, ordered by creation time
+    const q = query(adsCollection, orderBy('createdAt', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const adsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ad));
+      setAds(adsData);
+    });
 
     // Cleanup subscription on unmount
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchAds]);
-
+    return () => unsubscribe();
+  }, []);
 
   const purchasedPlotIds = useMemo(() => {
     return new Set(ads.flatMap(ad => ad.plots));
@@ -251,34 +240,18 @@ function App() {
     setIsModalOpen(false);
     setSelectedPlots([]);
   }, []);
-  
-  const handleCloseSuccessModal = useCallback(() => {
-    setIsSuccessModalOpen(false);
-    setSelectedPlots([]);
-    fetchAds(); // Reload the billboard data
-  }, [fetchAds]);
 
   const handlePurchase = useCallback(async (imageBlob: Blob, message: string) => {
     if (selectedPlots.length > 0) {
         try {
-            // 1. Upload image to Supabase Storage
-            const filePath = `public/ad-${Date.now()}`;
-            const { error: uploadError } = await supabase.storage
-                .from('images')
-                .upload(filePath, imageBlob);
-
-            if (uploadError) throw uploadError;
+            // 1. Upload image to Firebase Storage
+            const imageRef = ref(storage, `images/ad-${Date.now()}`);
+            await uploadBytes(imageRef, imageBlob);
 
             // 2. Get the public URL of the uploaded image
-            const { data: urlData } = supabase.storage
-                .from('images')
-                .getPublicUrl(filePath);
-            
-            if (!urlData?.publicUrl) throw new Error("Could not get public URL for the image.");
-            
-            const imageUrl = urlData.publicUrl;
+            const imageUrl = await getDownloadURL(imageRef);
 
-            // 3. Create a new ad record in the Supabase 'ads' table
+            // 3. Create a new ad document in Firestore
             const newAdData = {
                 plots: [...selectedPlots].sort((a, b) => {
                     const [aRow, aCol] = a.split('-').map(Number);
@@ -288,29 +261,15 @@ function App() {
                 }),
                 imageUrl,
                 message,
+                createdAt: serverTimestamp(),
             };
-            
-            const { error: insertError } = await supabase.from('ads').insert([newAdData]);
-            
-            if (insertError) throw insertError;
-
-            // --- SUCCESS ---
-            setIsModalOpen(false);
-            setIsSuccessModalOpen(true);
-
-        } catch (error: any) {
-             // --- FAILURE ---
+            await addDoc(adsCollection, newAdData);
+        } catch (error) {
             console.error("Error purchasing plot:", error);
-            if (error && typeof error.message === 'string' && error.message.toLowerCase().includes('bucket not found')) {
-                 alert("Purchase failed: Storage bucket 'images' not found.\n\nPlease go to your Supabase dashboard, navigate to Storage, and create a new PUBLIC bucket named 'images'.");
-            } else {
-                alert("Sorry, there was an error booking your plot. Please check the console and try again.");
-            }
-            handleCloseModal();
+            alert("Sorry, there was an error booking your plot. Please check the console and try again.");
         }
-    } else {
-        handleCloseModal();
     }
+    handleCloseModal();
   }, [selectedPlots, handleCloseModal]);
   
   const handleClearSelection = useCallback(() => {
@@ -400,10 +359,6 @@ function App() {
           onPurchase={handlePurchase}
           aspectRatio={selectionAspectRatio}
         />
-      )}
-
-      {isSuccessModalOpen && (
-        <SuccessModal onClose={handleCloseSuccessModal} />
       )}
     </main>
   );

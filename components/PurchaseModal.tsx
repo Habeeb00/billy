@@ -39,12 +39,34 @@ async function getCroppedImg(imageSrc: string, pixelCrop: Area): Promise<string>
   return canvas.toDataURL('image/jpeg', 0.9); // Return as high-quality JPEG
 }
 
+/**
+ * Converts a data URL string to a Blob object.
+ */
+function dataURLtoBlob(dataurl: string): Blob {
+    const arr = dataurl.split(',');
+    if (arr.length < 2 || !arr[0] || !arr[1]) {
+        throw new Error('Invalid data URL');
+    }
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    if (!mimeMatch) {
+        throw new Error('Could not parse MIME type from data URL');
+    }
+    const mime = mimeMatch[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+}
+
 
 // --- Component Interfaces ---
 
 interface PurchaseModalProps {
   onClose: () => void;
-  onPurchase: (imageUrl: string, message: string) => void;
+  onPurchase: (imageBlob: Blob, message: string) => void;
   aspectRatio: number;
 }
 
@@ -111,7 +133,8 @@ export function PurchaseModal({ onClose, onPurchase, aspectRatio }: PurchaseModa
     setIsProcessing(true);
     try {
       const croppedImageUrl = await getCroppedImg(imageUrl, croppedAreaPixels);
-      onPurchase(croppedImageUrl, message);
+      const imageBlob = dataURLtoBlob(croppedImageUrl);
+      onPurchase(imageBlob, message);
     } catch (e) {
       console.error(e);
       setError('Failed to crop image. Please try again with a different image.');
