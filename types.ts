@@ -12,4 +12,4 @@ export interface Ad {
   message: string;
 }
 
-export type Theme = 'day' | 'night' | 'rain';
+export type Theme = 'day' | 'night' | 'rain' | 'snowy';

@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/react-easy-crop/react-easy-crop.css" />
     <style>
       body {
         font-family: 'Press Start 2P', cursive;
@@ -15,6 +16,10 @@
       @keyframes drift {
         from { transform: translateX(100vw); }
         to { transform: translateX(-150px); }
+      }
+      @keyframes drift-reverse {
+        from { transform: translateX(-150px); }
+        to { transform: translateX(100vw); }
       }
       @keyframes fly {
         0% { transform: translateX(-10vw) translateY(0); }
@@ -31,6 +36,16 @@
           opacity: 0;
         }
       }
+      @keyframes fall-snow {
+        to {
+          transform: translateY(105vh) translateX(2vw);
+        }
+      }
+      @keyframes shoot {
+        0% { transform: translate(0, 0); opacity: 1; }
+        70% { opacity: 1; }
+        100% { transform: translate(-80vw, 80vh); opacity: 0; }
+      }
       @keyframes fade-out-fast {
         from { opacity: 1; }
         to { opacity: 0; }
@@ -41,7 +56,8 @@
   "imports": {
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/"
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react-easy-crop": "https://esm.sh/react-easy-crop"
   }
 }
 </script>

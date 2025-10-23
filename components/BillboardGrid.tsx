@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from 'react';
+
+
+import React, { useMemo } from 'react';
 import type { Ad } from '../types';
 
 const GRID_COLS = 28;
@@ -26,8 +28,12 @@ const getAdBoundingBox = (ad: Ad) => {
 };
 
 // --- Sub-components ---
-const PurchasedAd: React.FC<{ ad: Ad }> = ({ ad }) => {
-    const [isHovered, setIsHovered] = useState(false);
+interface PurchasedAdProps {
+    ad: Ad;
+}
+
+function PurchasedAd({ ad }: PurchasedAdProps) {
+    const [isHovered, setIsHovered] = React.useState(false);
 
     return (
         <div 
@@ -44,7 +50,7 @@ const PurchasedAd: React.FC<{ ad: Ad }> = ({ ad }) => {
             />
             {isHovered && (
                 <div 
-                    className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-max max-w-[200px] px-3 py-1.5 bg-black text-white rounded-md text-center text-xs sm:text-sm z-10 pointer-events-none"
+                    className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-max max-w-[200px] px-3 py-1.5 bg-black text-white rounded-md text-center text-xs sm:text-sm z-20 pointer-events-none"
                 >
                     {ad.message}
                     <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-black"></div>
@@ -52,22 +58,28 @@ const PurchasedAd: React.FC<{ ad: Ad }> = ({ ad }) => {
             )}
         </div>
     );
-};
+}
 
-const EmptyPlot: React.FC<{
+interface EmptyPlotProps {
     plotId: string;
     isSelected: boolean;
-    onMouseDown: (plotId: string) => void;
-    onMouseEnter: (plotId: string) => void;
-}> = ({ plotId, isSelected, onMouseDown, onMouseEnter }) => (
-    <div
-        onMouseDown={() => onMouseDown(plotId)}
-        onMouseEnter={() => onMouseEnter(plotId)}
-        className={`w-full h-full bg-gray-800 transition-colors ${isSelected ? 'outline outline-2 outline-green-400 outline-offset-[-2px]' : 'hover:bg-gray-700'}`}
-        aria-label={`Purchase plot ${plotId}`}
-    >
-    </div>
-);
+    onClick: (plotId: string) => void;
+}
+
+function EmptyPlot({ plotId, isSelected, onClick }: EmptyPlotProps) {
+    const baseClasses = 'w-full h-full transition-colors bg-gray-800 hover:bg-gray-700 cursor-pointer';
+    const selectedClasses = 'outline outline-2 outline-green-400 outline-offset-[-2px] z-10';
+
+    return (
+        <div
+            onClick={() => onClick(plotId)}
+            className={`${baseClasses} ${isSelected ? selectedClasses : ''}`}
+            aria-label={`Purchase plot ${plotId}`}
+        >
+        </div>
+    );
+}
+
 
 // --- Main Component ---
 interface BillboardGridProps {
@@ -77,83 +89,65 @@ interface BillboardGridProps {
     purchasedPlotIds: Set<string>;
 }
 
-export const BillboardGrid: React.FC<BillboardGridProps> = ({ ads, selectedPlots, setSelectedPlots, purchasedPlotIds }) => {
-    const [isSelecting, setIsSelecting] = useState(false);
-    const [startPlot, setStartPlot] = useState<string | null>(null);
+export function BillboardGrid({ ads, selectedPlots, setSelectedPlots, purchasedPlotIds }: BillboardGridProps) {
     const selectedPlotsSet = useMemo(() => new Set(selectedPlots), [selectedPlots]);
 
-    const getPlotsInRect = (startId: string, endId: string): string[] => {
-        const [startRow, startCol] = parsePlotId(startId);
-        const [endRow, endCol] = parsePlotId(endId);
-        const plots: string[] = [];
-        const r1 = Math.min(startRow, endRow);
-        const r2 = Math.max(startRow, endRow);
-        const c1 = Math.min(startCol, endCol);
-        const c2 = Math.max(startCol, endCol);
-
-        for (let r = r1; r <= r2; r++) {
-            for (let c = c1; c <= c2; c++) {
-                plots.push(`${r}-${c}`);
-            }
+    const handlePlotClick = (plotId: string) => {
+        if (purchasedPlotIds.has(plotId)) {
+            return;
         }
-        return plots;
-    };
-
-    const handleMouseDown = (plotId: string) => {
-        if (purchasedPlotIds.has(plotId)) return;
-        setIsSelecting(true);
-        setStartPlot(plotId);
-        setSelectedPlots([plotId]);
-    };
-
-    const handleMouseEnter = (plotId: string) => {
-        if (!isSelecting || !startPlot) return;
-        const plotsInRect = getPlotsInRect(startPlot, plotId);
         
-        // Check if any plot in the potential rectangular selection is already purchased.
-        const isSelectionValid = !plotsInRect.some(p => purchasedPlotIds.has(p));
-
-        if (isSelectionValid) {
-             // Only update the selection if the entire rectangle is available.
-            setSelectedPlots(plotsInRect);
+        const newSelectedPlots = new Set(selectedPlotsSet);
+        if (newSelectedPlots.has(plotId)) {
+            newSelectedPlots.delete(plotId);
+        } else {
+            newSelectedPlots.add(plotId);
         }
-        // If the selection is not valid (i.e., it overlaps with a purchased plot),
-        // we do nothing, which stops the selection rectangle from expanding over booked plots.
+        setSelectedPlots(Array.from(newSelectedPlots));
     };
-    
-    const handleMouseUp = () => {
-        setIsSelecting(false);
-        setStartPlot(null);
-    };
+
+    const adDataMap = useMemo(() => {
+        const map = new Map<string, { ad: Ad; isTopLeft: boolean }>();
+        ads.forEach(ad => {
+            const topLeftPlotId = ad.plots[0]; // Assumes plots are sorted
+            ad.plots.forEach(plotId => {
+                map.set(plotId, { ad, isTopLeft: plotId === topLeftPlotId });
+            });
+        });
+        return map;
+    }, [ads]);
 
     return (
         <div 
-            className="w-[95vw] h-[47.5vw] md:w-[80vw] md:h-[40vw] max-w-[1600px] max-h-[800px] bg-gray-900 grid grid-cols-[repeat(28,minmax(0,1fr))] grid-rows-[repeat(14,minmax(0,1fr))] gap-px border-2 border-black overflow-hidden relative"
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
+            className="w-[95vw] h-[47.5vw] md:w-[80vw] md:h-[40vw] max-w-[1600px] max-h-[800px] bg-gray-900 grid grid-cols-[repeat(28,minmax(0,1fr))] grid-rows-[repeat(14,minmax(0,1fr))] gap-px border-2 border-black overflow-hidden"
         >
             {Array.from({ length: GRID_COLS * GRID_ROWS }).map((_, index) => {
                 const row = Math.floor(index / GRID_COLS);
                 const col = index % GRID_COLS;
                 const plotId = `${row}-${col}`;
                 
-                if (purchasedPlotIds.has(plotId)) {
-                    return <div key={plotId} className="bg-gray-900"></div>; // Placeholder for purchased plots
-                }
+                const plotAdInfo = adDataMap.get(plotId);
 
-                return (
-                    <EmptyPlot
-                        key={plotId}
-                        plotId={plotId}
-                        isSelected={selectedPlotsSet.has(plotId)}
-                        onMouseDown={handleMouseDown}
-                        onMouseEnter={handleMouseEnter}
-                    />
-                );
+                if (plotAdInfo) {
+                    // This plot is part of a purchased ad.
+                    // Only render the ad component for the top-left plot of the ad.
+                    if (plotAdInfo.isTopLeft) {
+                        return <PurchasedAd key={plotAdInfo.ad.id} ad={plotAdInfo.ad} />;
+                    }
+                    // For other plots covered by the ad, render nothing.
+                    return null;
+                } else {
+                    // This plot is not part of any ad, so it's an empty, clickable plot.
+                    return (
+                        <EmptyPlot
+                            key={plotId}
+                            plotId={plotId}
+                            isSelected={selectedPlotsSet.has(plotId)}
+                            onClick={handlePlotClick}
+                        />
+                    );
+                }
             })}
-            
-            {/* Render full-sized ads on top */}
-            {ads.map((ad) => <PurchasedAd key={ad.id} ad={ad} />)}
         </div>
     );
-};
+}
