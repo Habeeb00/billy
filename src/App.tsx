@@ -54,7 +54,7 @@ const isSelectionRectangular = (plots: string[]): boolean => {
 
 // --- Background Components ---
 // FIX: Converted function declarations to const function expressions to resolve TypeScript errors with the 'key' prop.
-const Cloud = ({ style }: { style: React.CSSProperties }) => {
+const Cloud: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
   return (
     <div className="absolute w-24 h-10 sm:w-36 sm:h-16 bg-white rounded-full opacity-90" style={style}>
       <div className="absolute -bottom-2 left-4 w-16 h-8 sm:w-24 sm:h-12 bg-white rounded-full"></div>
@@ -64,27 +64,29 @@ const Cloud = ({ style }: { style: React.CSSProperties }) => {
 }
 
 // FIX: Converted function declarations to const function expressions to resolve TypeScript errors with the 'key' prop.
-const Star = ({ style }: { style: React.CSSProperties }) => {
+const Star: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
   return <div className="absolute bg-white w-1 h-1 rounded-full" style={{...style, animation: `twinkle ${Math.random() * 3 + 2}s infinite`}}></div>;
 }
 
-function Sun() {
+// FIX: Converted to const arrow function for consistency.
+const Sun = () => {
   return <div className="absolute top-12 left-12 w-16 h-16 bg-yellow-300 rounded-full shadow-lg"></div>;
 }
 
-function Moon() {
+// FIX: Converted to const arrow function for consistency.
+const Moon = () => {
   return <div className="absolute top-12 right-12 w-16 h-16 bg-gray-200 rounded-full shadow-lg border-4 border-gray-300"></div>;
 }
 
 // FIX: Converted function declarations to const function expressions to resolve TypeScript errors with the 'key' prop.
-const Raindrop = ({ style }: { style: React.CSSProperties }) => {
+const Raindrop: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
   return (
     <div className="absolute w-0.5 h-10 bg-blue-300 opacity-50" style={style}></div>
   );
 }
 
 // FIX: Converted function declarations to const function expressions to resolve TypeScript errors with the 'key' prop.
-const Bird = ({ style }: { style: React.CSSProperties }) => {
+const Bird: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
   return (
     <div className="absolute w-8 h-8" style={style}>
       <svg viewBox="0 0 10 7" className="w-full h-full" style={{ imageRendering: 'pixelated' }}>
@@ -95,12 +97,12 @@ const Bird = ({ style }: { style: React.CSSProperties }) => {
 }
 
 // FIX: Converted function declarations to const function expressions to resolve TypeScript errors with the 'key' prop.
-const Snowflake = ({ style }: { style: React.CSSProperties }) => {
+const Snowflake: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
     return <div className="absolute text-white text-lg select-none" style={style}>❄</div>;
 }
 
 // FIX: Converted function declarations to const function expressions to resolve TypeScript errors with the 'key' prop.
-const ShootingStar = ({ style }: { style: React.CSSProperties }) => {
+const ShootingStar: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
   return (
     <div className="absolute" style={style}>
       <div className="absolute w-48 h-px bg-gradient-to-l from-white/50 to-transparent transform rotate-[225deg] origin-top-left"></div>

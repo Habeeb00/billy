@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient, Session } from '@supabase/supabase-js';
 import { PurchaseModal } from './components/PurchaseModal';
@@ -56,7 +58,8 @@ const isSelectionRectangular = (plots: string[]): boolean => {
 };
 
 // --- Background Components ---
-const Cloud = ({ style }: { style: React.CSSProperties }) => {
+// FIX: Converted to React.FC to resolve key prop error
+const Cloud: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
   return (
     <div className="absolute w-24 h-10 sm:w-36 sm:h-16 bg-white rounded-full opacity-90" style={style}>
       <div className="absolute -bottom-2 left-4 w-16 h-8 sm:w-24 sm:h-12 bg-white rounded-full"></div>
@@ -65,25 +68,30 @@ const Cloud = ({ style }: { style: React.CSSProperties }) => {
   );
 };
 
-const Star = ({ style }: { style: React.CSSProperties }) => {
+// FIX: Converted to React.FC to resolve key prop error
+const Star: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
   return <div className="absolute bg-white w-1 h-1 rounded-full" style={{...style, animation: `twinkle ${Math.random() * 3 + 2}s infinite`}}></div>;
 };
 
-function Sun() {
+// FIX: Converted function declaration to const arrow function for consistency.
+const Sun = () => {
   return <div className="absolute top-12 left-12 w-16 h-16 bg-yellow-300 rounded-full shadow-lg"></div>;
 }
 
-function Moon() {
+// FIX: Converted function declaration to const arrow function for consistency.
+const Moon = () => {
   return <div className="absolute top-12 right-12 w-16 h-16 bg-gray-200 rounded-full shadow-lg border-4 border-gray-300"></div>;
 }
 
-const Raindrop = ({ style }: { style: React.CSSProperties }) => {
+// FIX: Converted to React.FC to resolve key prop error
+const Raindrop: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
   return (
     <div className="absolute w-0.5 h-10 bg-blue-300 opacity-50" style={style}></div>
   );
 };
 
-const Bird = ({ style }: { style: React.CSSProperties }) => {
+// FIX: Converted to React.FC to resolve key prop error
+const Bird: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
   return (
     <div className="absolute w-8 h-8" style={style}>
       <svg viewBox="0 0 10 7" className="w-full h-full" style={{ imageRendering: 'pixelated' }}>
@@ -93,11 +101,13 @@ const Bird = ({ style }: { style: React.CSSProperties }) => {
   );
 };
 
-const Snowflake = ({ style }: { style: React.CSSProperties }) => {
+// FIX: Converted to React.FC to resolve key prop error
+const Snowflake: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
     return <div className="absolute text-white text-lg select-none" style={style}>❄</div>;
 };
 
-const ShootingStar = ({ style }: { style: React.CSSProperties }) => {
+// FIX: Converted to React.FC to resolve key prop error
+const ShootingStar: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
   return (
     <div className="absolute" style={style}>
       <div className="absolute w-48 h-px bg-gradient-to-l from-white/50 to-transparent transform rotate-[225deg] origin-top-left"></div>
@@ -198,6 +208,14 @@ function App() {
   const [animationsEnabled, setAnimationsEnabled] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isAuthRedirect, setIsAuthRedirect] = useState(false);
+
+  useEffect(() => {
+    // On initial load, check if this tab is the result of an OAuth redirect.
+    if (window.location.hash.includes('access_token')) {
+      setIsAuthRedirect(true);
+    }
+  }, []);
 
   const fetchAds = useCallback(async () => {
     const { data, error } = await supabase
@@ -226,6 +244,10 @@ function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setIsAdmin(session?.user?.email === ADMIN_EMAIL);
+      // If the user is now logged in, close the auth modal.
+      if (session) {
+        setIsAuthModalOpen(false);
+      }
     })
 
     // Listen for real-time database changes
@@ -292,9 +314,15 @@ function App() {
   }, [fetchAds]);
 
   const handlePurchase = useCallback(async (imageBlob: Blob, message: string) => {
+    if (!session) {
+        alert("You must be logged in to book a plot. The login modal will now open.");
+        handleCloseModal();
+        setIsAuthModalOpen(true);
+        return;
+    }
+
     if (selectedPlots.length > 0) {
         try {
-            // FIX: Removed 'public/' prefix to prevent incorrect path creation which caused a 400 error.
             const filePath = `ad-${Date.now()}`;
             const { error: uploadError } = await supabase.storage
                 .from('images')
@@ -319,6 +347,7 @@ function App() {
                 }),
                 imageUrl,
                 message,
+                user_id: session.user.id, // Link the ad to the logged-in user
             };
             
             const { error: insertError } = await supabase.from('ads').insert([newAdData]);
@@ -340,7 +369,7 @@ function App() {
     } else {
         handleCloseModal();
     }
-  }, [selectedPlots, handleCloseModal]);
+  }, [selectedPlots, handleCloseModal, session]);
   
   const handleDeleteAd = useCallback(async (adId: string) => {
     if (!session || !isAdmin) {
@@ -353,25 +382,19 @@ function App() {
 
     const originalAds = ads;
     
-    // Optimistic UI update: remove the ad from the local state immediately.
     setAds(currentAds => currentAds.filter(ad => ad.id !== adId));
 
     try {
-        // FIX: Use a Supabase RPC call instead of a direct DELETE request.
-        // This is more robust and avoids the net::ERR_FAILED error caused by service workers.
         const { error } = await supabase.rpc('delete_ad', { ad_id: adId });
 
         if (error) {
-            // If the RPC call fails, throw the error to be caught below.
             throw error;
         }
-        // If successful, the optimistic update was correct and we're done.
 
     } catch (error: any) {
         console.error('Error deleting ad via RPC:', error);
         console.error('Full error object:', error);
         alert(`Failed to delete ad: ${error.message}. The billboard will be restored. This could be a permissions issue or the 'delete_ad' function might be missing in your Supabase project.`);
-        // Rollback the optimistic update on failure.
         setAds(originalAds);
     }
 }, [ads, session, isAdmin]);
@@ -398,6 +421,24 @@ function App() {
       alert("Could not log out. Please try again.");
     }
   };
+
+  if (isAuthRedirect) {
+    if (session) {
+        window.close();
+    }
+    return (
+        <main className="relative w-screen h-screen overflow-hidden bg-slate-900 flex flex-col items-center justify-center text-center p-4">
+            <h1 className="text-white text-2xl sm:text-3xl font-bold mb-4">
+              {session ? 'Login Successful!' : 'Finalizing login...'}
+            </h1>
+            <p className="text-white text-base sm:text-lg">
+              {session
+                ? 'You can now close this tab and return to the billboard.'
+                : 'Please wait a moment.'}
+            </p>
+        </main>
+    );
+  }
 
 
   return (
@@ -459,12 +500,12 @@ function App() {
             {selectedPlots.length > 0 && (
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 flex items-center gap-2 pointer-events-auto">
                   <button
-                    onClick={handleOpenModal}
+                    onClick={session ? handleOpenModal : () => setIsAuthModalOpen(true)}
                     disabled={!isSelectionValid}
                     className="px-4 py-2 sm:px-6 sm:py-3 bg-blue-500 text-white border-2 border-b-4 border-black hover:bg-blue-600 active:border-b-2 active:mt-0.5 transition-all text-xs sm:text-base whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed disabled:border-b-2"
-                    aria-label={`Book ${selectedPlots.length} selected plots`}
+                    aria-label={session ? `Book ${selectedPlots.length} selected plots` : "Login to book selected plots"}
                   >
-                    Book Selection ({selectedPlots.length})
+                    {session ? `Book Selection (${selectedPlots.length})` : `Login to Book (${selectedPlots.length})`}
                     {!isSelectionValid && <span className="block text-xs lowercase mt-1">(not a rectangle)</span>}
                   </button>
                   <button

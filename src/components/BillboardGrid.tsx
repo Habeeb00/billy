@@ -1,4 +1,5 @@
 
+
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import type { Ad } from '../types';
 
@@ -32,7 +33,7 @@ interface PurchasedAdProps {
 }
 
 // FIX: Converted function declaration to const function expression to resolve TypeScript error with 'key' prop.
-const PurchasedAd = ({ ad }: PurchasedAdProps) => {
+const PurchasedAd: React.FC<PurchasedAdProps> = ({ ad }) => {
     const [isHovered, setIsHovered] = React.useState(false);
 
     return (
@@ -68,7 +69,7 @@ interface EmptyPlotProps {
 }
 
 // FIX: Converted function declaration to const function expression to resolve TypeScript error with 'key' prop.
-const EmptyPlot = ({ plotId, isSelected, onMouseDown, onMouseEnter }: EmptyPlotProps) => {
+const EmptyPlot: React.FC<EmptyPlotProps> = ({ plotId, isSelected, onMouseDown, onMouseEnter }) => {
     const baseClasses = 'relative z-10 w-full h-full transition-colors bg-gray-800 hover:bg-gray-700 cursor-pointer';
     const selectedClasses = 'outline outline-2 outline-green-400 outline-offset-[-2px]';
 
@@ -111,7 +112,8 @@ export function BillboardGrid({ ads, selectedPlots, setSelectedPlots, purchasedP
         const handleMouseUpGlobal = () => {
             if (dragState.isMouseDown) {
                 if (!dragState.hasDragged && dragState.startPlotId) {
-                    const newSelectedPlots = new Set(dragState.initialSelection);
+                    // FIX: Explicitly type Set to avoid type inference issues with spread operator.
+                    const newSelectedPlots = new Set<string>(dragState.initialSelection);
                     if (newSelectedPlots.has(dragState.startPlotId)) {
                         newSelectedPlots.delete(dragState.startPlotId);
                     } else {
