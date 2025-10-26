@@ -10,6 +10,7 @@ export interface Ad {
   plots: string[];
   imageUrl: string;
   message: string;
+  user_id?: string;
 }
 
-export type Theme = 'day' | 'night' | 'rain' | 'snowy';
+export type Theme = 'day' | 'night';

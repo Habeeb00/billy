@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient, Session } from '@supabase/supabase-js';
 import { PurchaseModal } from './components/PurchaseModal';
@@ -10,12 +8,9 @@ import type { Ad, Theme } from './types';
 
 
 // --- Supabase Configuration ---
-// IMPORTANT: Replace with your actual Supabase project URL and anon key.
 const supabaseUrl = "https://sexehrjneeghnomoxopq.supabase.co";
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNleGVocmpuZWVnaG5vbW94b3BxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEyMzYzMTQsImV4cCI6MjA3NjgxMjMxNH0.OBioxZMP4y1B3dC9seGkdEMzR3WOAeZa-rqqd3aDT3c";
 
-// Export the client so other components can use it.
-// FIX: Added custom fetch to bypass service worker cache issues (net::ERR_FAILED).
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   global: {
     fetch: (input, init) => {
@@ -25,13 +20,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 // --- Admin Configuration ---
-// >>> IMPORTANT <<<
-// TO MAKE THE ADMIN FEATURES WORK, YOU MUST REPLACE THIS PLACEHOLDER
-// WITH THE EXACT EMAIL ADDRESS YOU USE TO LOG IN AS THE ADMINISTRATOR.
-const ADMIN_EMAIL = "habeebrahmanofficial@gmail.com"; // <-- CHANGE THIS VALUE!
+const ADMIN_EMAIL = "habeebrahmanofficial@gmail.com";
+const TOTAL_FREE_SLOTS = 2;
 
 
-const THEMES: Theme[] = ['day', 'night', 'rain', 'snowy'];
+const THEMES: Theme[] = ['day', 'night'];
 
 // --- Helper Functions ---
 const isSelectionRectangular = (plots: string[]): boolean => {
@@ -58,138 +51,135 @@ const isSelectionRectangular = (plots: string[]): boolean => {
 };
 
 // --- Background Components ---
-// FIX: Converted to React.FC to resolve key prop error
-const Cloud: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
+const CLOUD_IMAGES = [
+  'https://sexehrjneeghnomoxopq.supabase.co/storage/v1/object/public/assets/pngegg%20(1).png',
+  'https://sexehrjneeghnomoxopq.supabase.co/storage/v1/object/public/assets/pngegg%20(2).png'
+];
+
+const BIRD_GIF_URL_LTR = 'https://sexehrjneeghnomoxopq.supabase.co/storage/v1/object/public/assets/ezgif.com-animated-gif-maker%20(1).gif';
+const BIRD_GIF_URL_RTL = 'https://sexehrjneeghnomoxopq.supabase.co/storage/v1/object/public/assets/left%20bird.gif';
+
+
+const Cloud: React.FC<{ style: React.CSSProperties; imgSrc: string }> = ({ style, imgSrc }) => {
   return (
-    <div className="absolute w-24 h-10 sm:w-36 sm:h-16 bg-white rounded-full opacity-90" style={style}>
-      <div className="absolute -bottom-2 left-4 w-16 h-8 sm:w-24 sm:h-12 bg-white rounded-full"></div>
-      <div className="absolute -bottom-1 right-4 w-12 h-6 sm:w-20 sm:h-10 bg-white rounded-full"></div>
-    </div>
+    <img 
+      src={imgSrc} 
+      alt="A pixel art cloud" 
+      className="absolute w-24 h-auto md:w-48 pointer-events-none" 
+      style={{ ...style, imageRendering: 'pixelated' }} 
+    />
   );
 };
 
-// FIX: Converted to React.FC to resolve key prop error
 const Star: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
   return <div className="absolute bg-white w-1 h-1 rounded-full" style={{...style, animation: `twinkle ${Math.random() * 3 + 2}s infinite`}}></div>;
 };
 
-// FIX: Converted function declaration to const arrow function for consistency.
 const Sun = () => {
-  return <div className="absolute top-12 left-12 w-16 h-16 bg-yellow-300 rounded-full shadow-lg"></div>;
+  return <div className="w-16 h-16 md:w-32 md:h-32 bg-yellow-300 rounded-full shadow-lg"></div>;
 }
 
-// FIX: Converted function declaration to const arrow function for consistency.
 const Moon = () => {
-  return <div className="absolute top-12 right-12 w-16 h-16 bg-gray-200 rounded-full shadow-lg border-4 border-gray-300"></div>;
+  return <div className="w-16 h-16 md:w-32 md:h-32 bg-gray-200 rounded-full shadow-lg border-4 border-gray-300"></div>;
 }
 
-// FIX: Converted to React.FC to resolve key prop error
-const Raindrop: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
+const Bird: React.FC<{ style: React.CSSProperties; imgSrc: string }> = ({ style, imgSrc }) => {
   return (
-    <div className="absolute w-0.5 h-10 bg-blue-300 opacity-50" style={style}></div>
+    <img
+      src={imgSrc}
+      alt="A pixel art bird flying"
+      className="absolute w-6 h-6 md:w-10 md:h-10 pointer-events-none"
+      style={{ ...style, imageRendering: 'pixelated' }}
+    />
   );
 };
-
-// FIX: Converted to React.FC to resolve key prop error
-const Bird: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
-  return (
-    <div className="absolute w-8 h-8" style={style}>
-      <svg viewBox="0 0 10 7" className="w-full h-full" style={{ imageRendering: 'pixelated' }}>
-        <path d="M0 2h1v1h1v1h1v-1h1v-1h2v1h1v1h2v-1h1v2h-1v-1h-1v-1h-1v1h-1v1h-2v-1h-1v-1h-2v1h-1z" fill="black" />
-      </svg>
-    </div>
-  );
-};
-
-// FIX: Converted to React.FC to resolve key prop error
-const Snowflake: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
-    return <div className="absolute text-white text-lg select-none" style={style}>❄</div>;
-};
-
-// FIX: Converted to React.FC to resolve key prop error
-const ShootingStar: React.FC<{ style: React.CSSProperties }> = ({ style }) => {
-  return (
-    <div className="absolute" style={style}>
-      <div className="absolute w-48 h-px bg-gradient-to-l from-white/50 to-transparent transform rotate-[225deg] origin-top-left"></div>
-    </div>
-  );
-};
-
 
 const BG_COLORS: Record<Theme, string> = {
   day: 'bg-sky-400',
   night: 'bg-slate-900',
-  rain: 'bg-slate-800',
-  snowy: 'bg-slate-500'
 };
 
 function DynamicBackgroundComponent({ theme, animationsEnabled }: { theme: Theme, animationsEnabled: boolean }) {
     const clouds = useMemo(() => Array.from({ length: 7 }).map((_, i) => ({
-        top: `${Math.random() * 40}%`,
-        animation: `${i % 2 === 0 ? 'drift' : 'drift-reverse'} ${Math.random() * 30 + 20}s linear infinite`,
-        animationDelay: `-${Math.random() * 50}s`,
+        style: {
+            top: `${Math.random() * 40}%`,
+            animation: `${i % 2 === 0 ? 'drift' : 'drift-reverse'} ${Math.random() * 30 + 20}s linear infinite`,
+            animationDelay: `-${Math.random() * 50}s`,
+        },
+        imgSrc: CLOUD_IMAGES[Math.floor(Math.random() * CLOUD_IMAGES.length)]
     })), []);
 
-    const birds = useMemo(() => Array.from({ length: 3 }).map(() => ({
-        top: `${Math.random() * 30 + 5}%`,
-        animation: `fly ${Math.random() * 10 + 8}s linear infinite`,
-        animationDelay: `-${Math.random() * 20}s`,
-    })), []);
+    const birds = useMemo(() => {
+        const birdData = [];
+        // 2 birds flying left-to-right
+        for (let i = 0; i < 2; i++) {
+            birdData.push({
+                imgSrc: BIRD_GIF_URL_LTR,
+                style: {
+                    top: `${Math.random() * 30 + 5}%`,
+                    animation: `fly ${Math.random() * 10 + 8}s linear infinite`,
+                    animationDelay: `-${Math.random() * 20}s`,
+                }
+            });
+        }
+        // 1 bird flying right-to-left
+        birdData.push({
+            imgSrc: BIRD_GIF_URL_RTL,
+            style: {
+                top: `${Math.random() * 30 + 5}%`,
+                animation: `fly-reverse ${Math.random() * 10 + 8}s linear infinite`,
+                animationDelay: `-${Math.random() * 20}s`,
+            }
+        });
+        return birdData;
+    }, []);
+
+    const nightBirds = useMemo(() => {
+        // Only one bird for the night theme for ambiance
+        return [{
+            imgSrc: BIRD_GIF_URL_RTL, // Darker bird for night
+            style: {
+                top: `${Math.random() * 40 + 10}%`,
+                animation: `fly-reverse ${Math.random() * 12 + 10}s linear infinite`,
+                animationDelay: `-${Math.random() * 22}s`,
+            }
+        }];
+    }, []);
 
     const stars = useMemo(() => Array.from({ length: 80 }).map(() => ({
         top: `${Math.random() * 100}%`,
         left: `${Math.random() * 100}%`,
     })), []);
     
-    const shootingStars = useMemo(() => Array.from({ length: 2 }).map(() => ({
-        top: `${Math.random() * 50 - 20}%`,
-        left: `${Math.random() * 50 + 80}%`,
-        animation: `shoot ${Math.random() * 3 + 2}s ease-in-out infinite`,
-        animationDelay: `-${Math.random() * 10}s`,
-    })), []);
-
-    const raindrops = useMemo(() => Array.from({ length: 150 }).map(() => ({
-        left: `${Math.random() * 100}vw`,
-        top: '-50px',
-        animation: `fall ${Math.random() * 0.5 + 0.3}s linear infinite`,
-        animationDelay: `-${Math.random() * 2}s`
-    })), []);
-
-    const snowflakes = useMemo(() => Array.from({ length: 70 }).map(() => ({
-        left: `${Math.random() * 100}vw`,
-        top: '-10vh',
-        animation: `fall-snow ${Math.random() * 10 + 5}s linear infinite`,
-        animationDelay: `-${Math.random() * 15}s`,
-        transform: `scale(${Math.random() * 0.4 + 0.3})`,
-        opacity: Math.random() * 0.7 + 0.3,
-    })), []);
-
     return (
         <div className="absolute inset-0 w-full h-full overflow-hidden">
-            {theme === 'day' && (
-                <>
-                    <Sun />
-                    {animationsEnabled && clouds.map((style, i) => <Cloud key={`c-${i}`} style={style} />)}
-                    {animationsEnabled && birds.map((style, i) => <Bird key={`b-${i}`} style={style} />)}
-                </>
-            )}
-            {theme === 'night' && (
-                <>
-                    <Moon />
-                    {animationsEnabled && stars.map((style, i) => <Star key={`s-${i}`} style={style} />)}
-                    {animationsEnabled && shootingStars.map((style, i) => <ShootingStar key={`ss-${i}`} style={style} />)}
-                </>
-            )}
-            {theme === 'rain' && (
-                <>
-                    {animationsEnabled && raindrops.map((style, i) => <Raindrop key={`r-${i}`} style={style} />)}
-                </>
-            )}
-            {theme === 'snowy' && (
-                 <>
-                    {animationsEnabled && snowflakes.map((style, i) => <Snowflake key={`sf-${i}`} style={style} />)}
-                </>
-            )}
+            {/* Sun Wrapper: Animates using smooth CSS transitions */}
+            <div className={`absolute top-[10%] left-[10%] md:left-[2%] ${animationsEnabled ? 'transition-all duration-[1500ms] ease-in-out' : ''} ${theme === 'day' ? 'opacity-100 translate-x-0 translate-y-0 rotate-0' : 'opacity-0 translate-x-[110vw] translate-y-[10vh] rotate-90'}`}>
+                <Sun />
+            </div>
+
+            {/* Moon Wrapper: Rises from left to take sun's place */}
+            <div className={`absolute top-[10%] left-[10%] md:left-[2%] ${animationsEnabled ? 'transition-all duration-[1500ms] ease-in-out' : ''} ${theme === 'night' ? 'opacity-100 translate-x-0 translate-y-0' : 'opacity-0 -translate-x-[100vw]'}`}>
+                <Moon />
+            </div>
+            
+            {/* Day elements */}
+            <div className={`absolute inset-0 ${animationsEnabled ? 'transition-opacity duration-[1500ms]' : ''} ${theme === 'day' ? 'opacity-100' : 'opacity-0'}`}>
+                {animationsEnabled && clouds.map(({ style, imgSrc }, i) => <Cloud key={`c-${i}`} style={style} imgSrc={imgSrc} />)}
+                {animationsEnabled && birds.map(({ style, imgSrc }, i) => <Bird key={`b-${i}`} style={style} imgSrc={imgSrc} />)}
+            </div>
+
+            {/* Night elements */}
+            <div className={`absolute inset-0 ${animationsEnabled ? 'transition-opacity duration-[1500ms]' : ''} ${theme === 'night' ? 'opacity-100' : 'opacity-0'}`}>
+                {animationsEnabled && stars.map((style, i) => <Star key={`s-${i}`} style={style} />)}
+                {animationsEnabled && nightBirds.map(({ style, imgSrc }, i) => (
+                    <Bird 
+                      key={`nb-${i}`} 
+                      style={style} 
+                      imgSrc={imgSrc} 
+                    />
+                ))}
+            </div>
         </div>
     );
 }
@@ -275,6 +265,16 @@ function App() {
     };
   }, [fetchAds]);
 
+  const userBookedPlotCount = useMemo(() => {
+      if (!session) return 0;
+      return ads
+          .filter(ad => ad.user_id === session.user.id)
+          .reduce((total, ad) => total + ad.plots.length, 0);
+  }, [ads, session]);
+
+  const freeSlotsBeforeSelection = isAdmin ? Infinity : Math.max(0, TOTAL_FREE_SLOTS - userBookedPlotCount);
+  const needsMoreSlots = !isAdmin && selectedPlots.length > 0 && selectedPlots.length > freeSlotsBeforeSelection;
+
 
   const purchasedPlotIds = useMemo(() => {
     return new Set(ads.flatMap(ad => ad.plots));
@@ -285,7 +285,7 @@ function App() {
   }, [selectedPlots]);
 
   const handleOpenModal = () => {
-    if (selectedPlots.length === 0 || !isSelectionValid) return;
+    if (selectedPlots.length === 0 || !isSelectionValid || needsMoreSlots) return;
     
     const plots = selectedPlots.map(p => p.split('-').map(Number));
     const rows = plots.map(([r]) => r);
@@ -347,7 +347,7 @@ function App() {
                 }),
                 imageUrl,
                 message,
-                user_id: session.user.id, // Link the ad to the logged-in user
+                user_id: session.user.id,
             };
             
             const { error: insertError } = await supabase.from('ads').insert([newAdData]);
@@ -440,6 +440,47 @@ function App() {
     );
   }
 
+  const renderBookingButton = () => {
+      if (!session) {
+          return (
+              <button
+                  onClick={() => setIsAuthModalOpen(true)}
+                  disabled={!isSelectionValid}
+                  className="px-4 py-2 bg-blue-500 text-white border-2 border-b-4 border-black hover:bg-blue-600 active:border-b-2 active:mt-0.5 transition-all text-sm whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed disabled:border-b-2"
+                  aria-label="Login to book selected plots"
+              >
+                  Login to Book ({selectedPlots.length})
+                  {!isSelectionValid && <span className="block text-xs lowercase mt-1">(not a rectangle)</span>}
+              </button>
+          );
+      }
+      
+      if (needsMoreSlots) {
+        const mailtoHref = `mailto:${ADMIN_EMAIL}?subject=Request for More Ad Slots&body=Hi, I would like to request more ad slots. My user email is: ${session.user.email}`;
+        return (
+            <a
+                href={mailtoHref}
+                className="px-4 py-2 bg-yellow-400 text-black border-2 border-b-4 border-black hover:bg-yellow-500 active:border-b-2 active:mt-0.5 transition-all text-sm whitespace-nowrap text-center"
+                aria-label="Contact for more slots"
+            >
+                Contact ({selectedPlots.length})
+            </a>
+        )
+      }
+
+      return (
+          <button
+              onClick={handleOpenModal}
+              disabled={!isSelectionValid}
+              className="px-4 py-2 bg-blue-500 text-white border-2 border-b-4 border-black hover:bg-blue-600 active:border-b-2 active:mt-0.5 transition-all text-sm whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed disabled:border-b-2"
+              aria-label={`Book ${selectedPlots.length} selected plots`}
+          >
+              Book Selection ({selectedPlots.length})
+              {!isSelectionValid && <span className="block text-xs lowercase mt-1">(not a rectangle)</span>}
+          </button>
+      );
+  };
+
 
   return (
     <main className="relative w-screen h-screen overflow-hidden">
@@ -483,45 +524,47 @@ function App() {
         </div>
 
         <div className="w-full h-full flex flex-col items-center justify-end">
-          <div className="relative flex flex-col items-center">
-            <div className="bg-[#4a4a4a] p-2 sm:p-3 border-4 border-black shadow-[8px_8px_0px_rgba(0,0,0,0.7)] pointer-events-auto">
-              <div className="border-4 border-t-gray-300 border-l-gray-300 border-b-gray-800 border-r-gray-800">
-                <BillboardGrid
-                  ads={ads}
-                  selectedPlots={selectedPlots}
-                  setSelectedPlots={setSelectedPlots}
-                  purchasedPlotIds={purchasedPlotIds}
-                  isAdmin={isAdmin}
-                  onDeleteAd={handleDeleteAd}
-                />
-              </div>
-            </div>
-            
-            {selectedPlots.length > 0 && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 flex items-center gap-2 pointer-events-auto">
-                  <button
-                    onClick={session ? handleOpenModal : () => setIsAuthModalOpen(true)}
-                    disabled={!isSelectionValid}
-                    className="px-4 py-2 sm:px-6 sm:py-3 bg-blue-500 text-white border-2 border-b-4 border-black hover:bg-blue-600 active:border-b-2 active:mt-0.5 transition-all text-xs sm:text-base whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed disabled:border-b-2"
-                    aria-label={session ? `Book ${selectedPlots.length} selected plots` : "Login to book selected plots"}
-                  >
-                    {session ? `Book Selection (${selectedPlots.length})` : `Login to Book (${selectedPlots.length})`}
-                    {!isSelectionValid && <span className="block text-xs lowercase mt-1">(not a rectangle)</span>}
-                  </button>
-                  <button
-                    onClick={handleClearSelection}
-                    className="px-4 py-2 sm:px-6 sm:py-3 bg-red-500 text-white border-2 border-b-4 border-black hover:bg-red-600 active:border-b-2 active:mt-0.5 transition-all text-xs sm:text-base"
-                    aria-label="Clear current selection"
-                  >
-                    Clear
-                  </button>
+            <div className="flex flex-col items-center">
+                {/* Billboard Grid */}
+                <div className="bg-[#4a4a4a] p-2 sm:p-3 border-4 border-black shadow-[8px_8px_0px_rgba(0,0,0,0.7)] pointer-events-auto">
+                    <div className="border-4 border-t-gray-300 border-l-gray-300 border-b-gray-800 border-r-gray-800">
+                        <BillboardGrid
+                            ads={ads}
+                            selectedPlots={selectedPlots}
+                            setSelectedPlots={setSelectedPlots}
+                            purchasedPlotIds={purchasedPlotIds}
+                            isAdmin={isAdmin}
+                            onDeleteAd={handleDeleteAd}
+                        />
+                    </div>
                 </div>
-              )}
 
-            <div className="w-32 sm:w-40 h-60 sm:h-48 bg-green-600 border-x-4 border-b-4 border-black shadow-[inset_0_5px_0px_rgba(255,255,255,0.3),_inset_0_-5px_0px_rgba(0,0,0,0.3)]"></div>
-          </div>
+                {/* Billboard Stand */}
+                <div className="w-32 sm:w-40 h-60 sm:h-48 bg-green-600 border-x-4 border-b-4 border-black shadow-[inset_0_5px_0px_#ffffff4d,_inset_0_-5px_0px_#0000004d]"></div>
+            </div>
         </div>
       </div>
+
+      {/* Booking Controls - Fixed at bottom */}
+      {selectedPlots.length > 0 && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2 pointer-events-auto">
+              {session && !isAdmin && (
+                  <p className="text-xs sm:text-sm text-white bg-black/50 px-3 py-1 rounded">
+                      Free Slots Remaining: {freeSlotsBeforeSelection} / {TOTAL_FREE_SLOTS}
+                  </p>
+              )}
+              <div className="flex items-center gap-2">
+                  {renderBookingButton()}
+                  <button
+                      onClick={handleClearSelection}
+                      className="px-4 py-2 bg-red-500 text-white border-2 border-b-4 border-black hover:bg-red-600 active:border-b-2 active:mt-0.5 transition-all text-sm"
+                      aria-label="Clear current selection"
+                  >
+                      Clear
+                  </button>
+              </div>
+          </div>
+      )}
 
       {isModalOpen && (
         <PurchaseModal

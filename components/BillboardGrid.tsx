@@ -202,7 +202,7 @@ export function BillboardGrid({ ads, selectedPlots, setSelectedPlots, purchasedP
 
     return (
         <div 
-            className="w-[95vw] h-[47.5vw] md:w-[80vw] md:h-[40vw] max-w-[1600px] max-h-[800px] bg-gray-900 grid grid-cols-[repeat(28,minmax(0,1fr))] grid-rows-[repeat(14,minmax(0,1fr))] gap-px border-2 border-black overflow-hidden"
+            className="w-[95vw] md:w-[80vw] max-w-[1600px] aspect-[2/1] max-h-[calc(100vh-250px)] bg-gray-900 grid grid-cols-[repeat(28,minmax(0,1fr))] grid-rows-[repeat(14,minmax(0,1fr))] gap-px border-2 border-black overflow-hidden"
         >
             {Array.from({ length: GRID_COLS * GRID_ROWS }).map((_, index) => {
                 const row = Math.floor(index / GRID_COLS);

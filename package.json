@@ -12,8 +12,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-easy-crop": "latest",
-    "@supabase/supabase-js": "2",
-    "firebase": "^12.4.0"
+    "@supabase/supabase-js": "2"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
