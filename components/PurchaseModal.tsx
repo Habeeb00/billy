@@ -136,7 +136,6 @@ export function PurchaseModal({ onClose, onPurchase, aspectRatio }: PurchaseModa
       const imageBlob = dataURLtoBlob(croppedImageUrl);
       onPurchase(imageBlob, message);
     } catch (e) {
-      console.error(e);
       setError('Failed to crop image. Please try again with a different image.');
       setIsProcessing(false);
     }

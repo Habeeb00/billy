@@ -23,35 +23,16 @@ export function AuthModal({ onClose }: AuthModalProps) {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError('');
+    // Use redirect-based flow which is more reliable and avoids popup blockers.
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+    });
 
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          // This tells Supabase to return the OAuth URL instead of redirecting automatically.
-          skipBrowserRedirect: true,
-        },
-      });
-
-      if (error) throw error;
-      
-      if (data.url) {
-        // Open the URL in a new tab. window.open returns null if it was blocked.
-        const newTab = window.open(data.url, '_blank', 'noopener,noreferrer');
-        if (!newTab) {
-          setError('Popup blocked. Please allow popups and try again.');
-        }
-        // The onAuthStateChange listener in App.tsx will close the modal
-        // automatically when the user returns to this tab after logging in.
-      } else {
-        throw new Error('Could not get Google sign-in URL.');
-      }
-
-    } catch (err: any) {
-      setError(err.error_description || err.message || 'An unknown error occurred.');
-    } finally {
-        setLoading(false);
+    if (error) {
+      setError(error.message);
+      setLoading(false);
     }
+    // On success, the browser will redirect away, so no need to set loading to false.
   };
 
   return (
@@ -74,12 +55,12 @@ export function AuthModal({ onClose }: AuthModalProps) {
               style={{fontFamily: 'sans-serif'}}
           >
               <GoogleIcon className="w-6 h-6" />
-              <span className="font-bold text-base">{loading ? 'Preparing...' : 'Sign In with Google'}</span>
+              <span className="font-bold text-base">{loading ? 'Redirecting...' : 'Sign In with Google'}</span>
           </button>
         </div>
         
         <p className="text-xs text-center text-gray-600 mt-4" style={{fontFamily: 'sans-serif'}}>
-          Use the designated admin Google account to manage billboard ads. A new tab will open for authentication.
+          Use the designated admin Google account to manage billboard ads. You will be redirected for authentication.
         </p>
       </div>
     </div>

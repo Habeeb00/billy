@@ -14,7 +14,20 @@ const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   global: {
     fetch: (input, init) => {
-      return fetch(input, { ...init, cache: 'reload' });
+      // Create a new Headers object to preserve existing headers from Supabase client
+      const headers = new Headers(init?.headers);
+
+      // Add cache-busting headers to prevent stale data from service workers/browser cache
+      headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      headers.set('Pragma', 'no-cache');
+      headers.set('Expires', '0');
+
+      // Return the fetch request with the merged headers and cache option
+      return fetch(input, {
+        ...init,
+        headers,
+        cache: 'reload',
+      });
     },
   },
 });
@@ -193,19 +206,11 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [lastBookedPlots, setLastBookedPlots] = useState<string[]>([]);
   const [theme, setTheme] = useState<Theme>('day');
   const [selectionAspectRatio, setSelectionAspectRatio] = useState(1);
-  const [animationsEnabled, setAnimationsEnabled] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isAuthRedirect, setIsAuthRedirect] = useState(false);
-
-  useEffect(() => {
-    // On initial load, check if this tab is the result of an OAuth redirect.
-    if (window.location.hash.includes('access_token')) {
-      setIsAuthRedirect(true);
-    }
-  }, []);
 
   const fetchAds = useCallback(async () => {
     const { data, error } = await supabase
@@ -214,8 +219,7 @@ function App() {
       .order('created_at', { ascending: true });
     
     if (error) {
-      console.error('Error fetching ads:', error);
-      alert('Could not fetch ads from the database. Check the console for more details.');
+      alert('Could not fetch ads from the database. Please try refreshing the page.');
     } else if (data) {
       setAds(data as Ad[]);
     }
@@ -241,22 +245,18 @@ function App() {
     })
 
     // Listen for real-time database changes
-    const channel = supabase.channel('ads-changes')
+    const channel = supabase.channel('billboard-realtime');
+
+    channel
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'ads' },
-        (payload) => {
-          setAds(currentAds => [...currentAds, payload.new as Ad]);
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'ads' },
-        (payload) => {
-            setAds(currentAds => currentAds.filter(ad => ad.id !== (payload.old as Ad).id));
+        { event: '*', schema: 'public', table: 'ads' },
+        () => {
+          fetchAds();
         }
       )
       .subscribe();
+
 
     // Cleanup subscriptions on unmount
     return () => {
@@ -310,7 +310,8 @@ function App() {
   const handleCloseSuccessModal = useCallback(() => {
     setIsSuccessModalOpen(false);
     setSelectedPlots([]);
-    fetchAds(); // Reload the billboard data
+    setLastBookedPlots([]);
+    fetchAds(); // Explicitly refetch ads to ensure UI is up-to-date.
   }, [fetchAds]);
 
   const handlePurchase = useCallback(async (imageBlob: Blob, message: string) => {
@@ -321,55 +322,71 @@ function App() {
         return;
     }
 
-    if (selectedPlots.length > 0) {
-        try {
-            const filePath = `ad-${Date.now()}`;
-            const { error: uploadError } = await supabase.storage
-                .from('images')
-                .upload(filePath, imageBlob);
+    if (selectedPlots.length === 0) {
+        handleCloseModal();
+        return;
+    }
+    
+    try {
+        // Step 1: Upload the image first. If this fails, we haven't touched the database.
+        const filePath = `ad-${session.user.id}-${Date.now()}`;
+        const { error: uploadError } = await supabase.storage
+            .from('images')
+            .upload(filePath, imageBlob);
 
-            if (uploadError) throw uploadError;
+        if (uploadError) throw uploadError;
 
-            const { data: urlData } = supabase.storage
-                .from('images')
-                .getPublicUrl(filePath);
-            
-            if (!urlData?.publicUrl) throw new Error("Could not get public URL for the image.");
-            
-            const imageUrl = urlData.publicUrl;
+        const { data: urlData } = supabase.storage
+            .from('images')
+            .getPublicUrl(filePath);
+        
+        if (!urlData?.publicUrl) throw new Error("Could not get public URL for the image.");
+        
+        const imageUrl = urlData.publicUrl;
+        
+        const sortedPlots = [...selectedPlots].sort((a, b) => {
+            const [aRow, aCol] = a.split('-').map(Number);
+            const [bRow, bCol] = b.split('-').map(Number);
+            if (aRow !== bRow) return aRow - bRow;
+            return aCol - bCol;
+        });
 
-            const newAdData = {
-                plots: [...selectedPlots].sort((a, b) => {
-                    const [aRow, aCol] = a.split('-').map(Number);
-                    const [bRow, bCol] = b.split('-').map(Number);
-                    if (aRow !== bRow) return aRow - bRow;
-                    return aCol - bCol;
-                }),
-                imageUrl,
-                message,
-                user_id: session.user.id,
-            };
-            
-            const { error: insertError } = await supabase.from('ads').insert([newAdData]);
-            
-            if (insertError) throw insertError;
+        // Step 2: Call the atomic database function to book the ad. This is race-condition-safe.
+        const { error: rpcError } = await supabase.rpc('book_ad_safely', {
+            plots_to_book: sortedPlots,
+            image_url_to_insert: imageUrl,
+            message_to_insert: message,
+            user_id_to_insert: session.user.id
+        });
 
-            setIsModalOpen(false);
-            setIsSuccessModalOpen(true);
-
-        } catch (error: any) {
-            console.error("Error purchasing plot:", error);
-            if (error && typeof error.message === 'string' && error.message.toLowerCase().includes('bucket not found')) {
-                 alert("Purchase failed: Storage bucket 'images' not found.\n\nPlease go to your Supabase dashboard, navigate to Storage, and create a new PUBLIC bucket named 'images'.");
-            } else {
-                alert("Sorry, there was an error booking your plot. Please check the console and try again.");
-            }
-            handleCloseModal();
+        if (rpcError) {
+            // The RPC function will raise an exception if plots overlap, which we catch here.
+            throw new Error(rpcError.message);
         }
-    } else {
+
+        // Success! The real-time listener will update the UI automatically.
+        setLastBookedPlots(sortedPlots);
+        setIsModalOpen(false);
+        setIsSuccessModalOpen(true);
+
+    } catch (error: any) {
+        if (error && typeof error.message === 'string') {
+            if (error.message.toLowerCase().includes('bucket not found')) {
+                 alert("Purchase failed: Storage bucket 'images' not found.\n\nPlease go to your Supabase dashboard, navigate to Storage, and create a new PUBLIC bucket named 'images'.");
+            } else if (error.message.includes('plots have already been booked')) {
+                // This is our custom error from the RPC.
+                alert(`Booking failed: ${error.message} The billboard will refresh to show the latest state.`);
+                fetchAds(); // Force a refresh to show the ad that blocked us.
+            } else {
+                alert(`Sorry, there was an error booking your plot: ${error.message}.`);
+            }
+        } else {
+             alert(`An unknown error occurred during purchase.`);
+        }
+       
         handleCloseModal();
     }
-  }, [selectedPlots, handleCloseModal, session]);
+  }, [selectedPlots, handleCloseModal, session, fetchAds]);
   
   const handleDeleteAd = useCallback(async (adId: string) => {
     if (!session || !isAdmin) {
@@ -382,20 +399,20 @@ function App() {
 
     const originalAds = ads;
     
+    // Optimistic deletion from UI
     setAds(currentAds => currentAds.filter(ad => ad.id !== adId));
 
     try {
         const { error } = await supabase.rpc('delete_ad', { ad_id: adId });
 
         if (error) {
-            throw error;
+            throw error; // Let the catch block handle it
         }
+        // Success, UI is already updated.
 
     } catch (error: any) {
-        console.error('Error deleting ad via RPC:', error);
-        console.error('Full error object:', error);
         alert(`Failed to delete ad: ${error.message}. The billboard will be restored. This could be a permissions issue or the 'delete_ad' function might be missing in your Supabase project.`);
-        setAds(originalAds);
+        setAds(originalAds); // Revert UI on failure
     }
 }, [ads, session, isAdmin]);
 
@@ -410,35 +427,12 @@ function App() {
     setTheme(THEMES[nextIndex]);
   }, [theme]);
   
-  const toggleAnimations = useCallback(() => {
-    setAnimationsEnabled(prev => !prev);
-  }, []);
-
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
-      console.error("Error logging out:", error);
       alert("Could not log out. Please try again.");
     }
   };
-
-  if (isAuthRedirect) {
-    if (session) {
-        window.close();
-    }
-    return (
-        <main className="relative w-screen h-screen overflow-hidden bg-slate-900 flex flex-col items-center justify-center text-center p-4">
-            <h1 className="text-white text-2xl sm:text-3xl font-bold mb-4">
-              {session ? 'Login Successful!' : 'Finalizing login...'}
-            </h1>
-            <p className="text-white text-base sm:text-lg">
-              {session
-                ? 'You can now close this tab and return to the billboard.'
-                : 'Please wait a moment.'}
-            </p>
-        </main>
-    );
-  }
 
   const renderBookingButton = () => {
       if (!session) {
@@ -485,29 +479,31 @@ function App() {
   return (
     <main className="relative w-screen h-screen overflow-hidden">
       <div className={`absolute inset-0 z-0 pointer-events-none transition-colors duration-1000 ${BG_COLORS[theme]}`}>
-        <DynamicBackground theme={theme} animationsEnabled={animationsEnabled} />
+        <DynamicBackground theme={theme} animationsEnabled={true} />
       </div>
 
       <div className="relative z-10 w-full h-full pointer-events-none">
         <div className="absolute top-4 right-4 flex flex-col sm:flex-row gap-2 pointer-events-auto">
           <button
             onClick={cycleTheme}
-            className="bg-yellow-400 text-black border-2 border-b-4 border-black px-4 py-2 text-sm hover:bg-yellow-500 active:border-b-2 active:mt-0.5 transition-all"
+            className="bg-yellow-400 text-black border-2 border-b-4 border-black px-2 py-1 text-xs sm:px-4 sm:py-2 sm:text-sm hover:bg-yellow-500 active:border-b-2 active:mt-0.5 transition-all"
             aria-label={`Switch theme from ${theme}`}
           >
             THEME
           </button>
-          <button
-            onClick={toggleAnimations}
-            className="bg-yellow-400 text-black border-2 border-b-4 border-black px-4 py-2 text-sm hover:bg-yellow-500 active:border-b-2 active:mt-0.5 transition-all"
-            aria-label={`Toggle animations ${animationsEnabled ? 'off' : 'on'}`}
+          <a 
+            href="https://www.buymeacoffee.com/habeebrahman" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="bg-yellow-400 text-black border-2 border-b-4 border-black px-2 py-1 text-xs hover:bg-yellow-500 active:border-b-2 active:mt-0.5 transition-all text-center sm:hidden"
+            aria-label="Support the creator by buying them a coffee"
           >
-            ANIMATE: {animationsEnabled ? 'ON' : 'OFF'}
-          </button>
+            COFFEE
+          </a>
           {session ? (
               <button
                 onClick={handleLogout}
-                className="bg-red-500 text-white border-2 border-b-4 border-black px-4 py-2 text-sm hover:bg-red-600 active:border-b-2 active:mt-0.5 transition-all"
+                className="bg-red-500 text-white border-2 border-b-4 border-black px-2 py-1 text-xs sm:px-4 sm:py-2 sm:text-sm hover:bg-red-600 active:border-b-2 active:mt-0.5 transition-all"
                 aria-label="Log out"
               >
                 LOGOUT {isAdmin && '(ADMIN)'}
@@ -515,7 +511,7 @@ function App() {
           ) : (
              <button
                 onClick={() => setIsAuthModalOpen(true)}
-                className="bg-yellow-400 text-black border-2 border-b-4 border-black px-4 py-2 text-sm hover:bg-yellow-500 active:border-b-2 active:mt-0.5 transition-all"
+                className="bg-yellow-400 text-black border-2 border-b-4 border-black px-2 py-1 text-xs sm:px-4 sm:py-2 sm:text-sm hover:bg-yellow-500 active:border-b-2 active:mt-0.5 transition-all"
                 aria-label="Open login modal"
               >
                 LOGIN
@@ -524,7 +520,10 @@ function App() {
         </div>
 
         <div className="w-full h-full flex flex-col items-center justify-end">
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center relative">
+                <p className={`absolute bottom-full text-white text-sm mb-4 text-center pointer-events-none w-full transition-opacity duration-500 ${selectedPlots.length === 0 ? 'opacity-100' : 'opacity-0'}`} style={{ textShadow: '2px 2px rgba(0,0,0,0.7)' }}>
+                    Click on the slot to book your slot
+                </p>
                 {/* Billboard Grid */}
                 <div className="bg-[#4a4a4a] p-2 sm:p-3 border-4 border-black shadow-[8px_8px_0px_rgba(0,0,0,0.7)] pointer-events-auto">
                     <div className="border-4 border-t-gray-300 border-l-gray-300 border-b-gray-800 border-r-gray-800">
@@ -565,6 +564,18 @@ function App() {
               </div>
           </div>
       )}
+      
+      <a 
+        href="https://www.buymeacoffee.com/habeebrahman" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="hidden md:inline-flex items-center gap-2 fixed bottom-4 left-4 z-20 px-3 py-2 bg-yellow-400 text-black border-2 border-b-4 border-black hover:bg-yellow-500 active:border-b-2 active:mt-0.5 transition-all text-sm pointer-events-auto"
+        aria-label="Support the creator by buying them a coffee"
+      >
+        <span>☕</span>
+        <span>Buy me a coffee</span>
+      </a>
+
 
       {isModalOpen && (
         <PurchaseModal
@@ -575,7 +586,10 @@ function App() {
       )}
 
       {isSuccessModalOpen && (
-        <SuccessModal onClose={handleCloseSuccessModal} />
+        <SuccessModal 
+            onClose={handleCloseSuccessModal} 
+            lastBookedPlots={lastBookedPlots} 
+        />
       )}
 
       {isAuthModalOpen && (
